@@ -1,7 +1,7 @@
 import { getAI, getGenerativeModel, ResponseModality, VertexAIBackend } from 'firebase/ai'
 import { firebaseApp } from './firebase'
 
-export const GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image'
+export const GEMINI_IMAGE_MODEL = 'gemini-3.1-flash-image'
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -104,7 +104,7 @@ async function generateWithFirebaseVertexAI({ photoFile, prompt }) {
     )
 
     if (!generatedImagePart?.inlineData?.data) {
-      throw new Error('Gemini returned text but no generated image.')
+      throw new Error('Firebase Vertex AI returned text but no generated image.')
     }
 
     return {
@@ -116,10 +116,9 @@ async function generateWithFirebaseVertexAI({ photoFile, prompt }) {
     const message = error instanceof Error ? error.message : ''
 
     if (message.includes('GEN_AI_CONFIG_NOT_FOUND')) {
-      throw new Error(
-        'Firebase AI Logic is missing provider configuration. Make sure Vertex AI Gemini API is selected and enabled in Firebase AI Logic settings.',
-        { cause: error },
-      )
+      throw new Error('Firebase AI Logic is missing provider configuration.', {
+        cause: error,
+      })
     }
 
     throw error
@@ -131,7 +130,7 @@ async function generateWithFirebaseVertexAI({ photoFile, prompt }) {
  * following the CAL FIRE & IBHS defensible space assessment framework.
  */
 export function buildAssessmentImagePrompt({ zone, topography, flags, hazardDefs, recommendations }) {
-  const zoneLabel = zone === 'zone0' ? 'Zone 0 (0–5 ft)' : zone === 'zone1' ? 'Zone 1 (5–30 ft)' : 'Zone 2 (30–100 ft)'
+  const zoneLabel = zone === 'zone1' ? 'Zone 1 (5–30 ft)' : zone === 'zone2' ? 'Zone 2 (30–100 ft)' : 'Zone 0 (0–5 ft)'
   const flaggedTitles = flags.map((f) => hazardDefs[f]?.title || f).join('; ')
   const actionList = recommendations.actions.join('. ')
   const materials = recommendations.materials.join(', ')
@@ -156,26 +155,19 @@ Key Guidelines:
 }
 
 /**
- * Main generator: automatically attempts Firebase Vertex AI / default API key.
+ * Main generator: Uses Firebase Vertex AI by default for centralized billing through your Firebase project.
  */
 export async function generateFireSafeVisionImage({ photoFile, prompt }) {
   if (!photoFile) {
     throw new Error('Upload a property photo before running Gemini image generation.')
   }
 
-  // Check if public Firebase API key is present in environment or config
-  const apiKey = import.meta.env.VITE_FIREBASE_PUBLIC_API_KEY || ''
-
-  try {
-    return await generateWithFirebaseVertexAI({ photoFile, prompt })
-  } catch (vertexError) {
-    if (apiKey) {
-      try {
-        return await generateWithDirectApiKey({ apiKey, photoFile, prompt })
-      } catch (directError) {
-        console.warn('Direct API fallback failed:', directError)
-      }
-    }
-    throw vertexError
+  // 1. If explicit Gemini API key is provided in env, use direct API
+  const directKey = import.meta.env.VITE_GEMINI_API_KEY || ''
+  if (directKey && directKey.trim()) {
+    return generateWithDirectApiKey({ apiKey: directKey.trim(), photoFile, prompt })
   }
+
+  // 2. Default: Firebase Vertex AI SDK (bills directly to your Firebase project)
+  return generateWithFirebaseVertexAI({ photoFile, prompt })
 }

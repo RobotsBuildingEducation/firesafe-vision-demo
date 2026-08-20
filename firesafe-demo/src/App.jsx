@@ -7,6 +7,7 @@ import HazardReport from './components/HazardReport'
 import LearnSection from './components/LearnSection'
 import { deriveHazardFlags, HAZARD_LIBRARY } from './data/hazardLibrary'
 import { generateFireSafeVisionImage, buildAssessmentImagePrompt } from './geminiImage'
+import { transformPropertyToFireResilient } from './utils/imageTransformer'
 import './App.css'
 
 const SCAN_STEPS = [
@@ -48,7 +49,7 @@ export default function App() {
 
   useEffect(() => {
     return () => {
-      if (photoUrl && photoUrl !== sampleBefore && photoUrl !== sampleAfter) {
+      if (photoUrl && photoUrl !== sampleBefore && photoUrl !== sampleAfter && !photoUrl.startsWith('data:')) {
         URL.revokeObjectURL(photoUrl)
       }
     }
@@ -60,7 +61,9 @@ export default function App() {
 
   const handlePhotoSelected = (file) => {
     const nextUrl = URL.createObjectURL(file)
-    if (photoUrl && photoUrl !== sampleBefore) URL.revokeObjectURL(photoUrl)
+    if (photoUrl && photoUrl !== sampleBefore && !photoUrl.startsWith('data:')) {
+      URL.revokeObjectURL(photoUrl)
+    }
     setPhotoUrl(nextUrl)
     setPhotoFile(file)
     setPhotoName(file.name)
@@ -84,52 +87,77 @@ export default function App() {
       }
     }, 550)
 
+    const isCustomUpload = photoUrl !== sampleBefore
+
     try {
-      // If user uploaded a real photo file, attempt Gemini Image Generation
-      if (photoFile) {
-        const zoneKey = intakeAnswers.zone?.includes('1')
-          ? 'zone1'
-          : intakeAnswers.zone?.includes('2')
-          ? 'zone2'
-          : 'zone0'
+      if (isCustomUpload) {
+        let transformedUrl = ''
+        let noteText = ''
 
-        const prompt = buildAssessmentImagePrompt({
-          zone: zoneKey,
-          topography: intakeAnswers.topography,
-          flags: derived,
-          hazardDefs: HAZARD_LIBRARY,
-          recommendations: {
-            actions: derived.map((f) => HAZARD_LIBRARY[f]?.action).filter(Boolean),
-            materials: [
-              '3/4-inch crushed gravel perimeter',
-              'decomposed granite pathways',
-              'metal transition gate',
-              'corrosion-resistant vent mesh',
-            ],
-            plants: ['Chalk dudleya', 'Common yarrow', 'California fuchsia', 'Toyon', 'Lemonade berry'],
-          },
-        })
+        // Try Gemini / Vertex AI first
+        if (photoFile) {
+          try {
+            const zoneKey = intakeAnswers.zone?.includes('1')
+              ? 'zone1'
+              : intakeAnswers.zone?.includes('2')
+              ? 'zone2'
+              : 'zone0'
 
-        const result = await generateFireSafeVisionImage({
-          photoFile,
-          prompt,
-        })
+            const prompt = buildAssessmentImagePrompt({
+              zone: zoneKey,
+              topography: intakeAnswers.topography,
+              flags: derived,
+              hazardDefs: HAZARD_LIBRARY,
+              recommendations: {
+                actions: derived.map((f) => HAZARD_LIBRARY[f]?.action).filter(Boolean),
+                materials: [
+                  '3/4-inch crushed gravel perimeter',
+                  'decomposed granite pathways',
+                  'metal transition gate',
+                  'corrosion-resistant vent mesh',
+                ],
+                plants: ['Chalk dudleya', 'Common yarrow', 'California fuchsia', 'Toyon', 'Lemonade berry'],
+              },
+            })
 
-        setGeneratedImageUrl(result.imageUrl)
-        setGeneratedText(result.text || '')
+            const result = await generateFireSafeVisionImage({
+              photoFile,
+              prompt,
+            })
+
+            transformedUrl = result.imageUrl
+            noteText = result.text || ''
+          } catch (geminiError) {
+            console.warn('Gemini API call skipped/fallback, generating custom resilient transformation:', geminiError)
+          }
+        }
+
+        // If Gemini was unavailable or returned text without image, dynamically transform the user's custom photo
+        if (!transformedUrl) {
+          transformedUrl = await transformPropertyToFireResilient(photoUrl)
+          noteText =
+            'Fire-resilient design applied to your photo: 5-ft crushed rock non-combustible Zone 0 apron, spaced native Dudleya succulents and yarrow in Zone 1, and decomposed granite stepping paths.'
+        }
+
+        setGeneratedImageUrl(transformedUrl)
+        setGeneratedText(noteText)
       } else {
-        // Sample demo photo: use high-fidelity transformed sample image
+        // Default sample demo home
         setGeneratedImageUrl(sampleAfter)
         setGeneratedText(
           'Fire-resilient design applied: 5-ft crushed rock non-combustible Zone 0 apron, spaced native Dudleya succulents and yarrow in Zone 1, decomposed granite stepping paths, and cleared roofline overhangs.',
         )
       }
     } catch (err) {
-      console.warn('Gemini generation fallback to simulated resilient vision:', err)
-      setGeneratedImageUrl(sampleAfter)
-      setGeneratedText(
-        'Fire-resilient design applied: 5-ft crushed rock non-combustible Zone 0 apron, spaced native Dudleya succulents and yarrow in Zone 1, decomposed granite stepping paths, and cleared roofline overhangs.',
-      )
+      console.warn('Analysis transformation error:', err)
+      // Ultimate fallback: transform whatever image is active
+      try {
+        const fallbackTransformed = await transformPropertyToFireResilient(photoUrl)
+        setGeneratedImageUrl(fallbackTransformed)
+      } catch (fallbackErr) {
+        console.error('Fallback transformer failed:', fallbackErr)
+        setGeneratedImageUrl(sampleAfter)
+      }
     } finally {
       clearInterval(interval)
       setScanStepIndex(SCAN_STEPS.length)
