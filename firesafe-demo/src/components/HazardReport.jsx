@@ -8,6 +8,7 @@ export default function HazardReport({
   photoUrl,
   generatedImageUrl,
   generatedText,
+  generationError,
   flags = [],
   intakeAnswers = {},
   onReset,
@@ -103,6 +104,11 @@ export default function HazardReport({
           Drag the slider handle to compare your property's current state with the fire-resilient design. Numbered pins identify high-risk ignition points detected in the assessment.
         </p>
         {generatedText && <p className="model-note-banner">{generatedText}</p>}
+        {generationError && (
+          <div className="error-banner" style={{ marginTop: 12, padding: '12px 16px', background: '#FDF2F2', border: '1px solid #FCA5A5', borderRadius: 8, color: '#991B1B', fontSize: '0.85rem' }}>
+            <strong>Gemini Model Status:</strong> {generationError}
+          </div>
+        )}
       </div>
 
       {/* Summary Metrics */}

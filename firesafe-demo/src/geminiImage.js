@@ -80,7 +80,8 @@ async function generateWithDirectApiKey({ apiKey, photoFile, prompt }) {
   const inlineData = imagePart?.inlineData ?? imagePart?.inline_data
 
   if (!inlineData?.data) {
-    throw new Error('Gemini returned text but no generated image.')
+    const textDesc = parts.map((p) => p.text).filter(Boolean).join(' ')
+    throw new Error(`Gemini returned analysis text but no generated image: ${textDesc.slice(0, 150)}`)
   }
 
   return {
@@ -98,17 +99,32 @@ async function generateWithFirebaseVertexAI({ photoFile, prompt }) {
     const model = getImageModel()
     const imagePart = await fileToImagePart(photoFile)
     const result = await model.generateContent([{ text: prompt }, imagePart])
-    const imageParts = result.response.inlineDataParts?.() ?? []
-    const generatedImagePart = imageParts.find((part) =>
-      part.inlineData?.mimeType?.startsWith('image/'),
-    )
 
-    if (!generatedImagePart?.inlineData?.data) {
-      throw new Error('Firebase Vertex AI returned text but no generated image.')
+    const parts = result.response.candidates?.[0]?.content?.parts ?? []
+    const imagePartObj = parts.find((p) => {
+      const inline = p.inlineData ?? p.inline_data
+      return inline?.mimeType?.startsWith('image/') || inline?.mime_type?.startsWith('image/')
+    })
+    const inlineData = imagePartObj?.inlineData ?? imagePartObj?.inline_data
+
+    let generatedImageUrl = ''
+    if (inlineData?.data) {
+      generatedImageUrl = `data:${inlineData.mimeType ?? inlineData.mime_type ?? 'image/png'};base64,${inlineData.data}`
+    } else {
+      const inlineParts = result.response.inlineDataParts?.() ?? []
+      const fallbackPart = inlineParts.find((p) => p.inlineData?.mimeType?.startsWith('image/'))
+      if (fallbackPart?.inlineData?.data) {
+        generatedImageUrl = `data:${fallbackPart.inlineData.mimeType};base64,${fallbackPart.inlineData.data}`
+      }
+    }
+
+    if (!generatedImageUrl) {
+      const textOutput = result.response.text?.() || parts.map((p) => p.text).filter(Boolean).join(' ') || ''
+      throw new Error(`Gemini returned analysis text but no image was generated: ${textOutput.slice(0, 150)}`)
     }
 
     return {
-      imageUrl: `data:${generatedImagePart.inlineData.mimeType};base64,${generatedImagePart.inlineData.data}`,
+      imageUrl: generatedImageUrl,
       model: GEMINI_IMAGE_MODEL,
       text: result.response.text?.() ?? '',
     }
@@ -116,7 +132,7 @@ async function generateWithFirebaseVertexAI({ photoFile, prompt }) {
     const message = error instanceof Error ? error.message : ''
 
     if (message.includes('GEN_AI_CONFIG_NOT_FOUND')) {
-      throw new Error('Firebase AI Logic is missing provider configuration.', {
+      throw new Error('Firebase AI Logic is missing provider configuration in Firebase Console.', {
         cause: error,
       })
     }
@@ -155,19 +171,19 @@ Key Guidelines:
 }
 
 /**
- * Main generator: Uses Firebase Vertex AI by default for centralized billing through your Firebase project.
+ * Main generator: Exclusively calls Gemini AI model to perform the image transformation.
  */
 export async function generateFireSafeVisionImage({ photoFile, prompt }) {
   if (!photoFile) {
     throw new Error('Upload a property photo before running Gemini image generation.')
   }
 
-  // 1. If explicit Gemini API key is provided in env, use direct API
+  // 1. If direct Gemini API key is provided in env, use direct API
   const directKey = import.meta.env.VITE_GEMINI_API_KEY || ''
   if (directKey && directKey.trim()) {
     return generateWithDirectApiKey({ apiKey: directKey.trim(), photoFile, prompt })
   }
 
-  // 2. Default: Firebase Vertex AI SDK (bills directly to your Firebase project)
+  // 2. Default: Call Gemini via Firebase Vertex AI SDK
   return generateWithFirebaseVertexAI({ photoFile, prompt })
 }

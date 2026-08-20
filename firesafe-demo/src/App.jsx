@@ -1,192 +1,224 @@
-import { useState, useEffect } from 'react'
-import sampleBefore from './assets/sample-before.jpg'
-import sampleAfter from './assets/sample-after.jpg'
-import ZoneRuler from './components/ZoneRuler'
-import IntakeWizard from './components/IntakeWizard'
-import HazardReport from './components/HazardReport'
-import LearnSection from './components/LearnSection'
-import { deriveHazardFlags, HAZARD_LIBRARY } from './data/hazardLibrary'
-import { generateFireSafeVisionImage, buildAssessmentImagePrompt } from './geminiImage'
-import { transformPropertyToFireResilient } from './utils/imageTransformer'
-import './App.css'
+import { useState, useEffect } from "react";
+import sampleBefore from "./assets/sample-before.jpg";
+import ZoneRuler from "./components/ZoneRuler";
+import IntakeWizard from "./components/IntakeWizard";
+import HazardReport from "./components/HazardReport";
+import LearnSection from "./components/LearnSection";
+import { deriveHazardFlags, HAZARD_LIBRARY } from "./data/hazardLibrary";
+import {
+  generateFireSafeVisionImage,
+  buildAssessmentImagePrompt,
+} from "./geminiImage";
+import "./App.css";
 
 const SCAN_STEPS = [
-  'Reading ground surface materials in Zone 0',
-  'Locating vegetation proximity to structural walls',
-  'Checking fence attachments and ignition pathways',
-  'Inspecting foundation vents and under-eave gaps',
-  'Evaluating slope gradient against PRC § 4291 formulas',
-  'Cross-referencing IBHS Wildfire Prepared Home standards',
-  'Generating transformed fire-resilient property vision',
-]
+  "Reading ground surface materials in Zone 0",
+  "Locating vegetation proximity to structural walls",
+  "Checking fence attachments and ignition pathways",
+  "Inspecting foundation vents and under-eave gaps",
+  "Evaluating slope gradient against PRC § 4291 formulas",
+  "Cross-referencing IBHS Wildfire Prepared Home standards",
+  "Calling Gemini image model to synthesize fire-resilient design",
+];
 
 const DEFAULT_INTAKE = {
-  propertyType: 'Single-family home',
-  zone: 'Zone 0 (0–5 ft)',
-  topography: 'Flat (<5%)',
-  hazardZone: 'Very High / Extreme',
-  surface: 'Mulch or bark',
-  veg: 'Yes',
-  fence: 'Wood',
-  vents: 'Standard / Coarse mesh',
-  stored: 'Yes',
-  gutters: 'Some leaf litter / needles',
-  goal: 'Both insurance discount & code compliance',
-  jurisdiction: 'Los Angeles County (Unincorporated / Altadena)',
+  propertyType: "Single-family home",
+  zone: "Zone 0 (0–5 ft)",
+  topography: "Flat (<5%)",
+  hazardZone: "Very High / Extreme",
+  surface: "Mulch or bark",
+  veg: "Yes",
+  fence: "Wood",
+  vents: "Standard / Coarse mesh",
+  stored: "Yes",
+  gutters: "Some leaf litter / needles",
+  goal: "Both insurance discount & code compliance",
+  jurisdiction: "Los Angeles County (Unincorporated / Altadena)",
+};
+
+async function urlToFile(url, filename = "sample-property.jpg") {
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return new File([blob], filename, { type: blob.type || "image/jpeg" });
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('assess') // 'assess' | 'learn'
-  const [phase, setPhase] = useState('intake') // 'intake' | 'analyzing' | 'report'
-  const [intakeAnswers, setIntakeAnswers] = useState(DEFAULT_INTAKE)
-  const [photoUrl, setPhotoUrl] = useState(sampleBefore)
-  const [photoFile, setPhotoFile] = useState(null)
-  const [photoName, setPhotoName] = useState('sample-residence-zone0.jpg')
-  const [scanStepIndex, setScanStepIndex] = useState(0)
-  const [generatedImageUrl, setGeneratedImageUrl] = useState(sampleAfter)
-  const [generatedText, setGeneratedText] = useState('')
-  const [activeFlags, setActiveFlags] = useState([])
+  const [activeTab, setActiveTab] = useState("assess"); // 'assess' | 'learn'
+  const [phase, setPhase] = useState("intake"); // 'intake' | 'analyzing' | 'report'
+  const [intakeAnswers, setIntakeAnswers] = useState(DEFAULT_INTAKE);
+  const [photoUrl, setPhotoUrl] = useState(sampleBefore);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoName, setPhotoName] = useState("sample-residence-zone0.jpg");
+  const [scanStepIndex, setScanStepIndex] = useState(0);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState("");
+  const [generatedText, setGeneratedText] = useState("");
+  const [generationError, setGenerationError] = useState("");
+  const [activeFlags, setActiveFlags] = useState([]);
 
   useEffect(() => {
     return () => {
-      if (photoUrl && photoUrl !== sampleBefore && photoUrl !== sampleAfter && !photoUrl.startsWith('data:')) {
-        URL.revokeObjectURL(photoUrl)
+      if (
+        photoUrl &&
+        photoUrl !== sampleBefore &&
+        !photoUrl.startsWith("data:")
+      ) {
+        URL.revokeObjectURL(photoUrl);
       }
-    }
-  }, [photoUrl])
+    };
+  }, [photoUrl]);
 
   const handleAnswerChange = (key, value) => {
-    setIntakeAnswers((prev) => ({ ...prev, [key]: value }))
-  }
+    setIntakeAnswers((prev) => ({ ...prev, [key]: value }));
+  };
 
   const handlePhotoSelected = (file) => {
-    const nextUrl = URL.createObjectURL(file)
-    if (photoUrl && photoUrl !== sampleBefore && !photoUrl.startsWith('data:')) {
-      URL.revokeObjectURL(photoUrl)
+    const nextUrl = URL.createObjectURL(file);
+    if (
+      photoUrl &&
+      photoUrl !== sampleBefore &&
+      !photoUrl.startsWith("data:")
+    ) {
+      URL.revokeObjectURL(photoUrl);
     }
-    setPhotoUrl(nextUrl)
-    setPhotoFile(file)
-    setPhotoName(file.name)
-    setGeneratedImageUrl('')
-    setGeneratedText('')
-  }
+    setPhotoUrl(nextUrl);
+    setPhotoFile(file);
+    setPhotoName(file.name);
+    setGeneratedImageUrl("");
+    setGeneratedText("");
+    setGenerationError("");
+  };
 
   const handleStartAnalysis = async () => {
-    const derived = deriveHazardFlags(intakeAnswers)
-    setActiveFlags(derived)
-    setPhase('analyzing')
-    setScanStepIndex(0)
+    const derived = deriveHazardFlags(intakeAnswers);
+    setActiveFlags(derived);
+    setPhase("analyzing");
+    setScanStepIndex(0);
+    setGenerationError("");
 
     // Run visual step progress animation
-    let stepCount = 0
+    let stepCount = 0;
     const interval = setInterval(() => {
-      stepCount += 1
-      setScanStepIndex(stepCount)
+      stepCount += 1;
+      setScanStepIndex(stepCount);
       if (stepCount >= SCAN_STEPS.length - 1) {
-        clearInterval(interval)
+        clearInterval(interval);
       }
-    }, 550)
-
-    const isCustomUpload = photoUrl !== sampleBefore
+    }, 600);
 
     try {
-      if (isCustomUpload) {
-        let transformedUrl = ''
-        let noteText = ''
+      // Get photo file object
+      const activeFile =
+        photoFile || (await urlToFile(photoUrl, photoName || "property.jpg"));
 
-        // Try Gemini / Vertex AI first
-        if (photoFile) {
-          try {
-            const zoneKey = intakeAnswers.zone?.includes('1')
-              ? 'zone1'
-              : intakeAnswers.zone?.includes('2')
-              ? 'zone2'
-              : 'zone0'
+      const zoneKey = intakeAnswers.zone?.includes("1")
+        ? "zone1"
+        : intakeAnswers.zone?.includes("2")
+          ? "zone2"
+          : "zone0";
 
-            const prompt = buildAssessmentImagePrompt({
-              zone: zoneKey,
-              topography: intakeAnswers.topography,
-              flags: derived,
-              hazardDefs: HAZARD_LIBRARY,
-              recommendations: {
-                actions: derived.map((f) => HAZARD_LIBRARY[f]?.action).filter(Boolean),
-                materials: [
-                  '3/4-inch crushed gravel perimeter',
-                  'decomposed granite pathways',
-                  'metal transition gate',
-                  'corrosion-resistant vent mesh',
-                ],
-                plants: ['Chalk dudleya', 'Common yarrow', 'California fuchsia', 'Toyon', 'Lemonade berry'],
-              },
-            })
+      const prompt = buildAssessmentImagePrompt({
+        zone: zoneKey,
+        topography: intakeAnswers.topography,
+        flags: derived,
+        hazardDefs: HAZARD_LIBRARY,
+        recommendations: {
+          actions: derived
+            .map((f) => HAZARD_LIBRARY[f]?.action)
+            .filter(Boolean),
+          materials: [
+            "3/4-inch crushed gravel perimeter",
+            "decomposed granite pathways",
+            "metal transition gate",
+            "corrosion-resistant vent mesh",
+          ],
+          plants: [
+            "Chalk dudleya",
+            "Common yarrow",
+            "California fuchsia",
+            "Toyon",
+            "Lemonade berry",
+          ],
+        },
+      });
 
-            const result = await generateFireSafeVisionImage({
-              photoFile,
-              prompt,
-            })
+      // Exclusively call Gemini image generation
+      const result = await generateFireSafeVisionImage({
+        photoFile: activeFile,
+        prompt,
+      });
 
-            transformedUrl = result.imageUrl
-            noteText = result.text || ''
-          } catch (geminiError) {
-            console.warn('Gemini API call skipped/fallback, generating custom resilient transformation:', geminiError)
-          }
-        }
-
-        // If Gemini was unavailable or returned text without image, dynamically transform the user's custom photo
-        if (!transformedUrl) {
-          transformedUrl = await transformPropertyToFireResilient(photoUrl)
-          noteText =
-            'Fire-resilient design applied to your photo: 5-ft crushed rock non-combustible Zone 0 apron, spaced native Dudleya succulents and yarrow in Zone 1, and decomposed granite stepping paths.'
-        }
-
-        setGeneratedImageUrl(transformedUrl)
-        setGeneratedText(noteText)
-      } else {
-        // Default sample demo home
-        setGeneratedImageUrl(sampleAfter)
-        setGeneratedText(
-          'Fire-resilient design applied: 5-ft crushed rock non-combustible Zone 0 apron, spaced native Dudleya succulents and yarrow in Zone 1, decomposed granite stepping paths, and cleared roofline overhangs.',
-        )
-      }
+      setGeneratedImageUrl(result.imageUrl);
+      setGeneratedText(result.text || "");
+      setGenerationError("");
     } catch (err) {
-      console.warn('Analysis transformation error:', err)
-      // Ultimate fallback: transform whatever image is active
-      try {
-        const fallbackTransformed = await transformPropertyToFireResilient(photoUrl)
-        setGeneratedImageUrl(fallbackTransformed)
-      } catch (fallbackErr) {
-        console.error('Fallback transformer failed:', fallbackErr)
-        setGeneratedImageUrl(sampleAfter)
-      }
+      console.error("Gemini image generation error:", err);
+      setGeneratedImageUrl("");
+      setGeneratedText("");
+      setGenerationError(
+        err instanceof Error
+          ? err.message
+          : "Gemini AI image generation request failed.",
+      );
     } finally {
-      clearInterval(interval)
-      setScanStepIndex(SCAN_STEPS.length)
+      clearInterval(interval);
+      setScanStepIndex(SCAN_STEPS.length);
       setTimeout(() => {
-        setPhase('report')
-      }, 400)
+        setPhase("report");
+      }, 400);
     }
-  }
+  };
 
   const handleResetAssessment = () => {
-    setPhase('intake')
-    setPhotoUrl(sampleBefore)
-    setPhotoFile(null)
-    setPhotoName('sample-residence-zone0.jpg')
-    setGeneratedImageUrl(sampleAfter)
-    setGeneratedText('')
-    setScanStepIndex(0)
-  }
+    setPhase("intake");
+    setPhotoUrl(sampleBefore);
+    setPhotoFile(null);
+    setPhotoName("sample-residence-zone0.jpg");
+    setGeneratedImageUrl("");
+    setGeneratedText("");
+    setGenerationError("");
+    setScanStepIndex(0);
+  };
 
   return (
     <div className="fsv">
       {/* Top App Header */}
       <header className="fsv-bar">
         <div className="fsv-bar-in">
-          <div className="fsv-mark" onClick={() => setActiveTab('assess')} style={{ cursor: 'pointer' }}>
-            <svg className="glyph" width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <circle cx="10" cy="10" r="9" stroke="var(--ink)" strokeWidth="1.3" />
-              <circle cx="10" cy="10" r="5.2" stroke="var(--dudleya)" strokeWidth="1.3" />
-              <rect x="7.5" y="7.5" width="5" height="5" rx="1" fill="var(--ink)" />
+          <div
+            className="fsv-mark"
+            onClick={() => setActiveTab("assess")}
+            style={{ cursor: "pointer" }}
+          >
+            <svg
+              className="glyph"
+              width="22"
+              height="22"
+              viewBox="0 0 20 20"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle
+                cx="10"
+                cy="10"
+                r="9"
+                stroke="var(--ink)"
+                strokeWidth="1.3"
+              />
+              <circle
+                cx="10"
+                cy="10"
+                r="5.2"
+                stroke="var(--dudleya)"
+                strokeWidth="1.3"
+              />
+              <rect
+                x="7.5"
+                y="7.5"
+                width="5"
+                height="5"
+                rx="1"
+                fill="var(--ink)"
+              />
             </svg>
             <span className="name">FireSafe Vision</span>
           </div>
@@ -194,16 +226,16 @@ export default function App() {
           <nav className="fsv-tabs" aria-label="Main Navigation">
             <button
               className="fsv-tab"
-              data-on={activeTab === 'assess' ? 'true' : 'false'}
-              onClick={() => setActiveTab('assess')}
+              data-on={activeTab === "assess" ? "true" : "false"}
+              onClick={() => setActiveTab("assess")}
               type="button"
             >
               Assess
             </button>
             <button
               className="fsv-tab"
-              data-on={activeTab === 'learn' ? 'true' : 'false'}
-              onClick={() => setActiveTab('learn')}
+              data-on={activeTab === "learn" ? "true" : "false"}
+              onClick={() => setActiveTab("learn")}
               type="button"
             >
               Learn
@@ -214,11 +246,11 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="fsv-main">
-        {activeTab === 'learn' ? (
-          <LearnSection onStartAssessment={() => setActiveTab('assess')} />
+        {activeTab === "learn" ? (
+          <LearnSection onStartAssessment={() => setActiveTab("assess")} />
         ) : (
           <>
-            {phase === 'intake' && (
+            {phase === "intake" && (
               <IntakeWizard
                 intakeAnswers={intakeAnswers}
                 onChangeAnswer={handleAnswerChange}
@@ -229,51 +261,64 @@ export default function App() {
               />
             )}
 
-            {phase === 'analyzing' && (
+            {phase === "analyzing" && (
               <div className="fsv-narrow">
                 <ZoneRuler
                   label="Scanning Property Conditions"
                   right="Analysis in progress"
                   pct={80}
-                  ticks={['Property', 'Zone 0', 'Goal', 'Photo', 'Analysis', 'Report']}
+                  ticks={[
+                    "Property",
+                    "Zone 0",
+                    "Goal",
+                    "Photo",
+                    "Analysis",
+                    "Report",
+                  ]}
                   active={4}
                 />
-                <h1 className="step-title" style={{ marginTop: 24, marginBottom: 20 }}>
-                  Analyzing your property & defensible zones
+                <h1
+                  className="step-title"
+                  style={{ marginTop: 24, marginBottom: 20 }}
+                >
+                  Analyzing your property & generating AI vision
                 </h1>
                 <div className="scan">
                   {SCAN_STEPS.map((step, idx) => {
-                    const isDone = scanStepIndex > idx
-                    const isActive = scanStepIndex === idx
+                    const isDone = scanStepIndex > idx;
+                    const isActive = scanStepIndex === idx;
                     return (
                       <div
                         key={step}
                         className="scan-row"
-                        data-state={isDone ? 'done' : isActive ? 'active' : 'idle'}
+                        data-state={
+                          isDone ? "done" : isActive ? "active" : "idle"
+                        }
                       >
                         <span className="dot" />
                         <span>{step}</span>
                       </div>
-                    )
+                    );
                   })}
                 </div>
               </div>
             )}
 
-            {phase === 'report' && (
+            {phase === "report" && (
               <HazardReport
                 photoUrl={photoUrl}
                 generatedImageUrl={generatedImageUrl}
                 generatedText={generatedText}
+                generationError={generationError}
                 flags={activeFlags}
                 intakeAnswers={intakeAnswers}
                 onReset={handleResetAssessment}
-                onLearnMore={() => setActiveTab('learn')}
+                onLearnMore={() => setActiveTab("learn")}
               />
             )}
           </>
         )}
       </main>
     </div>
-  )
+  );
 }
