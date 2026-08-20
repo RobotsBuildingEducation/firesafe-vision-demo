@@ -56,16 +56,20 @@ export default function App() {
   const [activeFlags, setActiveFlags] = useState([]);
 
   useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+  }, [phase, activeTab])
+
+  useEffect(() => {
     return () => {
       if (
         photoUrl &&
         photoUrl !== sampleBefore &&
-        !photoUrl.startsWith("data:")
+        !photoUrl.startsWith('data:')
       ) {
-        URL.revokeObjectURL(photoUrl);
+        URL.revokeObjectURL(photoUrl)
       }
-    };
-  }, [photoUrl]);
+    }
+  }, [photoUrl])
 
   const handleAnswerChange = (key, value) => {
     setIntakeAnswers((prev) => ({ ...prev, [key]: value }));

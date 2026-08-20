@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import ZoneRuler from './ZoneRuler'
 
 const INTAKE_STEPS = [
@@ -101,6 +101,10 @@ export default function IntakeWizard({
   const [currentStep, setCurrentStep] = useState(0)
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef(null)
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+  }, [currentStep])
 
   const isPhotoPhase = currentStep === 3
   const stepObj = INTAKE_STEPS[currentStep]
