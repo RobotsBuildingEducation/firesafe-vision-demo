@@ -1,0 +1,138 @@
+
+<h2 class="sr-only">FireSafe Vision MVP feature set and technical architecture overview</h2>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.wrap{padding:1.5rem 0;font-family:var(--font-sans)}
+.nav{display:flex;gap:4px;margin-bottom:1.5rem;border-bottom:0.5px solid var(--color-border-tertiary);padding-bottom:0}
+.nav button{font-size:13px;padding:6px 14px 8px;border:none;background:transparent;color:var(--color-text-secondary);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-0.5px}
+.nav button.active{color:var(--color-text-primary);border-bottom-color:var(--color-text-primary);font-weight:500}
+.panel{display:none}.panel.active{display:block}
+.section-label{font-size:11px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1.25rem}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem}
+.card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px 16px}
+.card h3{font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:6px}
+.card p{font-size:12px;color:var(--color-text-secondary);line-height:1.5}
+.tag{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;margin-bottom:8px}
+.tag.in{background:#EAF3DE;color:#3B6D11}
+.tag.out{background:#FCEBEB;color:#A32D2D}
+.tag.later{background:#FAEEDA;color:#633806}
+.tag.fe{background:#E6F1FB;color:#0C447C}
+.tag.be{background:#EEEDFE;color:#3C3489}
+.tag.ai{background:#E1F5EE;color:#085041}
+.tag.infra{background:#F1EFE8;color:#444441}
+.divider{border:none;border-top:0.5px solid var(--color-border-tertiary);margin:1.25rem 0}
+.phase-row{display:flex;gap:0;margin-bottom:1.25rem}
+.phase{flex:1;padding:12px 14px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary)}
+.phase:first-child{border-radius:var(--border-radius-md) 0 0 var(--border-radius-md)}
+.phase:last-child{border-radius:0 var(--border-radius-md) var(--border-radius-md) 0}
+.phase h4{font-size:12px;font-weight:500;color:var(--color-text-primary);margin-bottom:4px}
+.phase p{font-size:11px;color:var(--color-text-secondary);line-height:1.4}
+.phase .wk{font-size:11px;color:var(--color-text-tertiary);margin-bottom:6px}
+.risk-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.risk{background:var(--color-background-secondary);border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary);padding:12px 14px}
+.risk h4{font-size:12px;font-weight:500;color:var(--color-text-primary);margin-bottom:4px}
+.risk p{font-size:12px;color:var(--color-text-secondary);line-height:1.4}
+.risk .mitigation{font-size:11px;color:#3B6D11;margin-top:6px;font-weight:500}
+.cta-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:1.25rem}
+.cta-btn{padding:7px 14px;font-size:12px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-primary);cursor:pointer}
+.cta-btn:hover{background:var(--color-background-secondary)}
+</style>
+
+<div class="wrap">
+  <div class="nav">
+    <button class="active" onclick="show('features',this)">Features</button>
+    <button onclick="show('arch',this)">Architecture</button>
+    <button onclick="show('phases',this)">Build phases</button>
+    <button onclick="show('risks',this)">Risks</button>
+  </div>
+
+  <div id="features" class="panel active">
+    <div class="section-label">In scope — MVP</div>
+    <div class="grid2">
+      <div class="card"><div class="tag in">in</div><h3>Photo upload + zone selector</h3><p>Homeowner uploads a property photo and selects which zone they want assessed (Zone 0, 1, or 2). Mobile-first, works on field visits.</p></div>
+      <div class="card"><div class="tag in">in</div><h3>Property condition intake</h3><p>Short form: topography type, current vegetation, fence material, existing hardscaping. Feeds the prompt context for generation.</p></div>
+      <div class="card"><div class="tag in">in</div><h3>AI vision analysis</h3><p>Claude or GPT-4 Vision reads the uploaded photo and surfaces hazards automatically — e.g. combustible fence in Zone 0, dense vegetation.</p></div>
+      <div class="card"><div class="tag in">in</div><h3>Before / after image generation</h3><p>Stable Diffusion img2img conditioned on a fire-resilient design prompt. Generates a transformed version of the same property photo.</p></div>
+      <div class="card"><div class="tag in">in</div><h3>Recommendations output</h3><p>Zone-specific action list with materials (gravel, fiber cement, metal fencing), native plant species for SoCal, and spacing guidance from the USGBC-CA curriculum.</p></div>
+      <div class="card"><div class="tag in">in</div><h3>Shareable PDF report</h3><p>One-page output: before/after image, hazard flags, recommended actions, plant list. Designed to hand to a contractor or bring to a city permitting office.</p></div>
+    </div>
+    <div class="section-label">Out of scope — v1</div>
+    <div class="grid3">
+      <div class="card"><div class="tag out">out</div><h3>Contractor matching</h3><p>Directory integration deferred. v1 links to USGBC-CA professionals directory.</p></div>
+      <div class="card"><div class="tag out">out</div><h3>Permit filing</h3><p>Regulatory complexity varies by jurisdiction. Out of scope for prototype.</p></div>
+      <div class="card"><div class="tag out">out</div><h3>3D site modeling</h3><p>LiDAR / parcel data integration is a v2 consideration tied to SGVCOG data access.</p></div>
+    </div>
+    <div class="section-label">Future additions</div>
+    <div class="grid3">
+      <div class="card"><div class="tag later">later</div><h3>Neighborhood view</h3><p>Aggregate risk score for a block — useful for FireSafe Council and COG outreach.</p></div>
+      <div class="card"><div class="tag later">later</div><h3>Multilingual</h3><p>Spanish first — critical for Altadena/Pasadena affected populations.</p></div>
+      <div class="card"><div class="tag later">later</div><h3>Incentive finder</h3><p>Auto-surface rebates and grants relevant to recommended upgrades.</p></div>
+    </div>
+  </div>
+
+  <div id="arch" class="panel">
+    <div class="section-label">Frontend</div>
+    <div class="grid2">
+      <div class="card"><div class="tag fe">frontend</div><h3>Next.js + React</h3><p>Mobile-first PWA. Works offline for intake form — uploads queue when connection returns. Deployed on Vercel or Netlify.</p></div>
+      <div class="card"><div class="tag fe">frontend</div><h3>UI components</h3><p>Tailwind CSS. Photo upload with preview, zone selector map overlay, step-by-step intake form, before/after image slider, PDF export via react-pdf.</p></div>
+    </div>
+    <div class="section-label">Backend</div>
+    <div class="grid2">
+      <div class="card"><div class="tag be">backend</div><h3>Next.js API routes</h3><p>Serverless functions handle: image upload to storage, vision analysis call, generation call, recommendation assembly, PDF generation. No separate server needed for MVP.</p></div>
+      <div class="card"><div class="tag be">backend</div><h3>Supabase</h3><p>Postgres for session/report storage. Storage bucket for uploaded and generated images. Row-level security so homeowner data stays private. Free tier covers MVP scale.</p></div>
+    </div>
+    <div class="section-label">AI layer</div>
+    <div class="grid3">
+      <div class="card"><div class="tag ai">AI</div><h3>Vision analysis</h3><p>Claude API (claude-sonnet-4-6). Reads photo + intake form, outputs structured hazard JSON: zone, risk factors, recommended changes.</p></div>
+      <div class="card"><div class="tag ai">AI</div><h3>Image generation</h3><p>Stable Diffusion via Replicate API (img2img). Conditioned on property photo + fire-resilient design prompt built from hazard JSON.</p></div>
+      <div class="card"><div class="tag ai">AI</div><h3>Knowledge base (RAG)</h3><p>USGBC-CA course content + CAL FIRE defensible space rules chunked and embedded. Retrieved context shapes the recommendation output. Pinecone or pgvector.</p></div>
+    </div>
+    <div class="section-label">Infrastructure</div>
+    <div class="grid2">
+      <div class="card"><div class="tag infra">infra</div><h3>Open source repo</h3><p>MIT license on GitHub. Documented for fork — other COGs, nonprofits, and community groups can deploy their own instance with their own API keys.</p></div>
+      <div class="card"><div class="tag infra">infra</div><h3>Cost model</h3><p>API costs: ~$0.10–0.25 per report (vision analysis + image generation). PDF generation free. Supabase free tier. Grant-funded API budget for nonprofit deployment.</p></div>
+    </div>
+  </div>
+
+  <div id="phases" class="panel">
+    <div class="section-label">Build roadmap</div>
+    <div class="phase-row">
+      <div class="phase"><div class="wk">Weeks 1–2</div><h4>Foundation</h4><p>Repo setup, Next.js scaffold, Supabase config, API key wiring, photo upload + storage working end-to-end.</p></div>
+      <div class="phase"><div class="wk">Weeks 3–4</div><h4>Vision + intake</h4><p>Claude vision call returning structured hazard JSON from photo. Intake form UI. Prompt engineering for SoCal fire context.</p></div>
+      <div class="phase"><div class="wk">Weeks 5–6</div><h4>Generation</h4><p>Stable Diffusion img2img integration via Replicate. Before/after UI with image comparison slider. Prompt tuning for native plant rendering.</p></div>
+      <div class="phase"><div class="wk">Weeks 7–8</div><h4>Output + RAG</h4><p>Recommendation engine with RAG against USGBC-CA content. PDF report generation. End-to-end flow tested with real property photos.</p></div>
+      <div class="phase"><div class="wk">Week 9</div><h4>Launch</h4><p>Docs, open source release, pilot with one community partner (SGVCOG or CA FireSafe Council).</p></div>
+    </div>
+    <div class="divider"></div>
+    <div class="section-label">Developer profile needed</div>
+    <div class="grid2">
+      <div class="card"><h3>Core skills</h3><p>React / Next.js, REST API integration, basic prompt engineering. One full-stack developer can carry this for MVP — estimated 200–250 hours total.</p></div>
+      <div class="card"><h3>Nice to have</h3><p>Experience with image generation APIs (Replicate / Stability AI), vector databases (pgvector or Pinecone), and PDF generation in React.</p></div>
+    </div>
+  </div>
+
+  <div id="risks" class="panel">
+    <div class="section-label">Key risks and mitigations</div>
+    <div class="risk-row">
+      <div class="risk"><h4>Image generation fidelity</h4><p>SD img2img may produce generic or implausible outputs that don't match the actual property.</p><div class="mitigation">Mitigation: use ControlNet for structure preservation; build a human review step before PDF is finalized in v1.</div></div>
+      <div class="risk"><h4>Homeowner trust</h4><p>AI-generated recommendations touching someone's home post-trauma requires careful framing.</p><div class="mitigation">Mitigation: frame as "inspiration, not instruction" — always point to a licensed professional for execution. Trauma-informed UX copy.</div></div>
+      <div class="risk"><h4>API cost at scale</h4><p>$0.15–0.25 per report is manageable at pilot scale but needs a grant budget for broader deployment.</p><div class="mitigation">Mitigation: batch generation, cache common prompts, apply for Anthropic nonprofit credits and Replicate open source tier.</div></div>
+      <div class="risk"><h4>Regulatory accuracy</h4><p>Zone rules vary by jurisdiction — Altadena, Pasadena, Arcadia all differ slightly.</p><div class="mitigation">Mitigation: RAG knowledge base is jurisdiction-tagged. v1 scopes to LA County unincorporated + Altadena only, clearly disclosed.</div></div>
+    </div>
+    <div class="cta-row">
+      <button class="cta-btn" onclick="sendPrompt('Help me write a one-page case study for FireSafe Vision to share with developers and nonprofit partners')">Draft case study ↗</button>
+      <button class="cta-btn" onclick="sendPrompt('What grant funding sources could support FireSafe Vision as an open source wildfire resilience tool?')">Find funding ↗</button>
+      <button class="cta-btn" onclick="sendPrompt('Help me write a GitHub README for the FireSafe Vision open source repo')">Draft README ↗</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+</script>

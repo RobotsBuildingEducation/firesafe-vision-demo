@@ -80,7 +80,7 @@ async function generateWithDirectApiKey({ apiKey, photoFile, prompt }) {
   const inlineData = imagePart?.inlineData ?? imagePart?.inline_data
 
   if (!inlineData?.data) {
-    throw new Error('Gemini returned text but no generated image. Try a simpler photo or prompt.')
+    throw new Error('Gemini returned text but no generated image.')
   }
 
   return {
@@ -104,7 +104,7 @@ async function generateWithFirebaseVertexAI({ photoFile, prompt }) {
     )
 
     if (!generatedImagePart?.inlineData?.data) {
-      throw new Error('Gemini returned text but no generated image. Try a simpler photo or prompt.')
+      throw new Error('Gemini returned text but no generated image.')
     }
 
     return {
@@ -117,7 +117,7 @@ async function generateWithFirebaseVertexAI({ photoFile, prompt }) {
 
     if (message.includes('GEN_AI_CONFIG_NOT_FOUND')) {
       throw new Error(
-        'Firebase AI Logic is missing provider configuration. Make sure Vertex AI Gemini API is selected and enabled in Firebase AI Logic settings, then try again after it propagates.',
+        'Firebase AI Logic is missing provider configuration. Make sure Vertex AI Gemini API is selected and enabled in Firebase AI Logic settings.',
         { cause: error },
       )
     }
@@ -126,14 +126,56 @@ async function generateWithFirebaseVertexAI({ photoFile, prompt }) {
   }
 }
 
-export async function generateFireSafeVisionImage({ apiKey, photoFile, prompt }) {
+/**
+ * Builds a structured, domain-accurate prompt for image transformation
+ * following the CAL FIRE & IBHS defensible space assessment framework.
+ */
+export function buildAssessmentImagePrompt({ zone, topography, flags, hazardDefs, recommendations }) {
+  const zoneLabel = zone === 'zone0' ? 'Zone 0 (0–5 ft)' : zone === 'zone1' ? 'Zone 1 (5–30 ft)' : 'Zone 2 (30–100 ft)'
+  const flaggedTitles = flags.map((f) => hazardDefs[f]?.title || f).join('; ')
+  const actionList = recommendations.actions.join('. ')
+  const materials = recommendations.materials.join(', ')
+  const plants = recommendations.plants.join(', ')
+
+  return `
+Transform this residential property photo into a photorealistic, fire-resilient Southern California defensible landscape.
+
+Key Guidelines:
+- Preserve the exact home architecture, roofline, siding style, window locations, camera angle, and natural lighting.
+- Transform the targeted defensible area: ${zoneLabel}.
+- Topography setting: ${topography}.
+- Identified hazard conditions to fix: ${flaggedTitles}.
+- Apply these fire-resilient design upgrades: ${actionList}.
+- Materials to render: ${materials}.
+- Plant palette (Zone 1/2 only, beyond the 5ft non-combustible perimeter): ${plants}.
+- Ensure the first 5 feet against all walls, stairs, and posts is a clean non-combustible apron of crushed rock, decomposed granite, or flagstone pavers.
+- Replace any combustible wood/vinyl fence meeting the structure with non-combustible metal, steel posts, or masonry.
+- DO NOT add flames, smoke, fire trucks, warning signs, text overlays, watermark labels, people, or disaster destruction.
+- Render a realistic, desirable, drought-tolerant, fire-hardened home exterior.
+`.trim()
+}
+
+/**
+ * Main generator: automatically attempts Firebase Vertex AI / default API key.
+ */
+export async function generateFireSafeVisionImage({ photoFile, prompt }) {
   if (!photoFile) {
     throw new Error('Upload a property photo before running Gemini image generation.')
   }
 
-  if (apiKey.trim()) {
-    return generateWithDirectApiKey({ apiKey: apiKey.trim(), photoFile, prompt })
-  }
+  // Check if public Firebase API key is present in environment or config
+  const apiKey = import.meta.env.VITE_FIREBASE_PUBLIC_API_KEY || ''
 
-  return generateWithFirebaseVertexAI({ photoFile, prompt })
+  try {
+    return await generateWithFirebaseVertexAI({ photoFile, prompt })
+  } catch (vertexError) {
+    if (apiKey) {
+      try {
+        return await generateWithDirectApiKey({ apiKey, photoFile, prompt })
+      } catch (directError) {
+        console.warn('Direct API fallback failed:', directError)
+      }
+    }
+    throw vertexError
+  }
 }

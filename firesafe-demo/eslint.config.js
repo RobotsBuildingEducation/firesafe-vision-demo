@@ -5,7 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', '.firebase', 'functions', 'firebaseResources']),
+  globalIgnores(['dist', '.firebase', 'functions', 'firebaseResources', 'Firesafe docs']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
