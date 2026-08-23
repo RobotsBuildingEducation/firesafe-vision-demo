@@ -9,6 +9,7 @@ import { HAZARD_LIBRARY, PIN_COORDINATES } from '../data/hazardLibrary'
 export default function BeforeAfterSlider({
   originalSrc,
   generatedSrc,
+  lens = 'both',
   flags = [],
   selectedFlag,
   onSelectFlag,
@@ -54,6 +55,13 @@ export default function BeforeAfterSlider({
     if (sev === 'high') return 'var(--sev-high)'
     if (sev === 'medium') return 'var(--sev-med)'
     return 'var(--sev-low)'
+  }
+
+  const getVisionLabel = () => {
+    if (!isGenerated) return 'Resilient Vision'
+    if (lens === 'state') return 'Resilient Vision · State PRC § 4291 (Succulents in Zone 0)'
+    if (lens === 'ins') return 'Resilient Vision · IBHS Standard (0-ft Hardscape Apron)'
+    return 'Resilient Vision · Both Standards (Hardened + Native Garden)'
   }
 
   const afterImage = generatedSrc || originalSrc
@@ -110,6 +118,7 @@ export default function BeforeAfterSlider({
         style={{ clipPath: `inset(0 0 0 ${sliderPos}%)` }}
       >
         <img
+          key={afterImage}
           src={afterImage}
           alt="Transformed fire-resilient property design"
           className="ba-img-after"
@@ -121,7 +130,7 @@ export default function BeforeAfterSlider({
         Now (High Risk)
       </div>
       <div className="ba-tag" style={{ right: 14 }}>
-        {isGenerated ? 'Resilient Vision (0–5ft Hardscape)' : 'Resilient Vision'}
+        {getVisionLabel()}
       </div>
 
       {/* Divider Handle */}

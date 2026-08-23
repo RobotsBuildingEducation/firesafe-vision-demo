@@ -6,6 +6,7 @@ import { PLANT_DATABASE } from '../data/plantDatabase'
 
 export default function HazardReport({
   photoUrl,
+  generatedImages = {},
   generatedImageUrl,
   generatedText,
   generationError,
@@ -17,6 +18,12 @@ export default function HazardReport({
   const [lens, setLens] = useState('both') // 'both' | 'state' | 'ins'
   const [selectedPin, setSelectedPin] = useState(null)
   const [openCard, setOpenCard] = useState(null)
+
+  const currentGeneratedSrc =
+    (generatedImages && generatedImages[lens]) ||
+    generatedImageUrl ||
+    (generatedImages && (generatedImages.both || generatedImages.ins || generatedImages.state)) ||
+    ''
 
   // Group active flags by defensible zone
   const z0Flags = flags.filter((code) => HAZARD_LIBRARY[code]?.zone === 0)
@@ -72,21 +79,28 @@ export default function HazardReport({
           <h1 className="display">What we found</h1>
         </div>
 
-        <div className="lens" role="group" aria-label="Filter standard view">
-          {[
-            ['both', 'Both standards'],
-            ['state', 'State rule (PRC 4291)'],
-            ['ins', 'Insurance (IBHS / Safer from Wildfires)'],
-          ].map(([val, label]) => (
-            <button
-              key={val}
-              type="button"
-              data-on={lens === val ? 'true' : 'false'}
-              onClick={() => setLens(val)}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="lens-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          <div className="lens" role="group" aria-label="Filter standard view">
+            {[
+              ['both', 'Both standards'],
+              ['state', 'State rule (PRC 4291)'],
+              ['ins', 'Insurance (IBHS / Safer from Wildfires)'],
+            ].map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                data-on={lens === val ? 'true' : 'false'}
+                onClick={() => setLens(val)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="lens-hint mono" style={{ fontSize: '11px', color: 'var(--sage)', textAlign: 'right', maxWidth: 440 }}>
+            {lens === 'both' && 'Viewing Comprehensive Master Plan: 0-ft hardscape apron + lush native botanic garden beyond 5 ft'}
+            {lens === 'state' && 'Viewing State Rule (PRC § 4291): Irrigated native succulents permitted in 0–5 ft foundation zone'}
+            {lens === 'ins' && 'Viewing IBHS Insurance Standard: Strict 0-ft hardscape apron (zero vegetation) + ember vent retrofits'}
+          </span>
         </div>
       </div>
 
@@ -94,11 +108,12 @@ export default function HazardReport({
       <div className="slider-wrapper">
         <BeforeAfterSlider
           originalSrc={photoUrl}
-          generatedSrc={generatedImageUrl}
+          generatedSrc={currentGeneratedSrc}
+          lens={lens}
           flags={flags}
           selectedFlag={selectedPin}
           onSelectFlag={handleSelectFlag}
-          isGenerated={Boolean(generatedImageUrl)}
+          isGenerated={Boolean(currentGeneratedSrc)}
         />
         <p className="note">
           Drag the slider handle to compare your property's current state with the fire-resilient design. Numbered pins identify high-risk ignition points detected in the assessment.

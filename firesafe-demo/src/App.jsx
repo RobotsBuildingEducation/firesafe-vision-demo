@@ -6,8 +6,7 @@ import HazardReport from "./components/HazardReport";
 import LearnSection from "./components/LearnSection";
 import { deriveHazardFlags, HAZARD_LIBRARY } from "./data/hazardLibrary";
 import {
-  generateFireSafeVisionImage,
-  buildAssessmentImagePrompt,
+  generateFireSafeVisionMultiStandardImages,
 } from "./geminiImage";
 import "./App.css";
 
@@ -22,19 +21,19 @@ const SCAN_STEPS = [
 ];
 
 const DEFAULT_INTAKE = {
-  propertyType: "Single-family home",
-  zone: "Zone 0 (0–5 ft)",
-  topography: "Flat (<5%)",
-  hazardZone: "Very High / Extreme",
-  surface: "Mulch or bark",
-  veg: "Yes",
-  fence: "Wood",
-  vents: "Standard / Coarse mesh",
-  stored: "Yes",
-  gutters: "Some leaf litter / needles",
-  goal: "Both insurance discount & code compliance",
-  jurisdiction: "Los Angeles County (Unincorporated / Altadena)",
-};
+  propertyType: 'Single-family home',
+  zone: ['Zone 0 (0–5 ft)'],
+  topography: ['Flat (<5%)'],
+  hazardZone: 'Very High / Extreme',
+  surface: ['Bark / Wood mulch'],
+  veg: ['Dense shrubs touching siding'],
+  fence: ['Wood fence / gate attached to house'],
+  vents: ['Coarse 1/4″ wire mesh / open vents'],
+  stored: ['Firewood stack near wall (<30 ft)', 'Trash / Recycle / Green bins against siding'],
+  gutters: ['Pine needles / dry leaves in gutters'],
+  goal: 'Both insurance discount & code compliance',
+  jurisdiction: 'Los Angeles County (Unincorporated / Altadena)',
+}
 
 async function urlToFile(url, filename = "sample-property.jpg") {
   const res = await fetch(url);
@@ -50,7 +49,7 @@ export default function App() {
   const [photoFile, setPhotoFile] = useState(null);
   const [photoName, setPhotoName] = useState("sample-residence-zone0.jpg");
   const [scanStepIndex, setScanStepIndex] = useState(0);
-  const [generatedImageUrl, setGeneratedImageUrl] = useState("");
+  const [generatedImages, setGeneratedImages] = useState({ both: "", state: "", ins: "" });
   const [generatedText, setGeneratedText] = useState("");
   const [generationError, setGenerationError] = useState("");
   const [activeFlags, setActiveFlags] = useState([]);
@@ -87,7 +86,7 @@ export default function App() {
     setPhotoUrl(nextUrl);
     setPhotoFile(file);
     setPhotoName(file.name);
-    setGeneratedImageUrl("");
+    setGeneratedImages({ both: "", state: "", ins: "" });
     setGeneratedText("");
     setGenerationError("");
   };
@@ -120,7 +119,8 @@ export default function App() {
           ? "zone2"
           : "zone0";
 
-      const prompt = buildAssessmentImagePrompt({
+      const basePromptConfig = {
+        intakeAnswers,
         zone: zoneKey,
         topography: intakeAnswers.topography,
         flags: derived,
@@ -143,20 +143,20 @@ export default function App() {
             "Lemonade berry",
           ],
         },
-      });
+      };
 
-      // Exclusively call Gemini image generation
-      const result = await generateFireSafeVisionImage({
+      // Exclusively call Gemini multi-standard image generation
+      const result = await generateFireSafeVisionMultiStandardImages({
         photoFile: activeFile,
-        prompt,
+        basePromptConfig,
       });
 
-      setGeneratedImageUrl(result.imageUrl);
+      setGeneratedImages(result.images || { both: "", state: "", ins: "" });
       setGeneratedText(result.text || "");
       setGenerationError("");
     } catch (err) {
       console.error("Gemini image generation error:", err);
-      setGeneratedImageUrl("");
+      setGeneratedImages({ both: "", state: "", ins: "" });
       setGeneratedText("");
       setGenerationError(
         err instanceof Error
@@ -177,11 +177,12 @@ export default function App() {
     setPhotoUrl(sampleBefore);
     setPhotoFile(null);
     setPhotoName("sample-residence-zone0.jpg");
-    setGeneratedImageUrl("");
+    setGeneratedImages({ both: "", state: "", ins: "" });
     setGeneratedText("");
     setGenerationError("");
     setScanStepIndex(0);
   };
+
 
   return (
     <div className="fsv">
@@ -311,7 +312,12 @@ export default function App() {
             {phase === "report" && (
               <HazardReport
                 photoUrl={photoUrl}
-                generatedImageUrl={generatedImageUrl}
+                generatedImages={generatedImages}
+                generatedImageUrl={
+                  generatedImages.both ||
+                  generatedImages.ins ||
+                  generatedImages.state
+                }
                 generatedText={generatedText}
                 generationError={generationError}
                 flags={activeFlags}

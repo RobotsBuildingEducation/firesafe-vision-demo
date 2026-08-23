@@ -144,29 +144,124 @@ async function generateWithFirebaseVertexAI({ photoFile, prompt }) {
 /**
  * Builds a structured, domain-accurate prompt for image transformation
  * following the CAL FIRE & IBHS defensible space assessment framework.
+ *
+ * @param {Object} config
+ * @param {string} [config.standard='both'] - 'both' | 'state' | 'ins'
  */
-export function buildAssessmentImagePrompt({ zone, topography, flags, hazardDefs, recommendations }) {
-  const zoneLabel = zone === 'zone1' ? 'Zone 1 (5–30 ft)' : zone === 'zone2' ? 'Zone 2 (30–100 ft)' : 'Zone 0 (0–5 ft)'
-  const flaggedTitles = flags.map((f) => hazardDefs[f]?.title || f).join('; ')
-  const actionList = recommendations.actions.join('. ')
-  const materials = recommendations.materials.join(', ')
-  const plants = recommendations.plants.join(', ')
+export function buildAssessmentImagePrompt({
+  intakeAnswers = {},
+  zone,
+  topography,
+  flags = [],
+  hazardDefs = {},
+  recommendations = {},
+  standard = 'both',
+}) {
+  const zoneLabel = Array.isArray(zone)
+    ? zone.join(', ')
+    : zone === 'zone1'
+      ? 'Zone 1 (5–30 ft)'
+      : zone === 'zone2'
+        ? 'Zone 2 (30–100 ft)'
+        : 'Zone 0 (0–5 ft)'
+  const topoLabel = Array.isArray(topography)
+    ? topography.join(', ')
+    : topography || intakeAnswers?.topography || 'Standard residential parcel'
+
+  // Compile specific hazard fixes based on intake answers & flags
+  const specificHazardActions = []
+  if (flags.includes('Z0-MULCH') || String(intakeAnswers?.surface || '').toLowerCase().includes('mulch')) {
+    specificHazardActions.push('Remove all wood bark mulch and replace with inorganic decomposed granite or gravel')
+  }
+  if (flags.includes('Z0-FENCE') || String(intakeAnswers?.fence || '').toLowerCase().includes('wood')) {
+    specificHazardActions.push('Replace the 5-foot section of attached wood fence touching the house with a modern non-combustible metal transition gate')
+  }
+  if (String(intakeAnswers?.veg || '').toLowerCase().includes('ivy') || String(intakeAnswers?.veg || '').toLowerCase().includes('vine')) {
+    specificHazardActions.push('Completely strip climbing ivy and vines from all siding and exterior walls')
+  }
+  if (flags.includes('Z0-ITEMS') || String(intakeAnswers?.stored || '').toLowerCase().includes('firewood') || String(intakeAnswers?.stored || '').toLowerCase().includes('bin')) {
+    specificHazardActions.push('Remove firewood piles, plastic trash bins, and combustible patio items from exterior walls')
+  }
+  if (flags.includes('Z0-GUTTER') || String(intakeAnswers?.gutters || '').toLowerCase().includes('needle') || String(intakeAnswers?.gutters || '').toLowerCase().includes('debris')) {
+    specificHazardActions.push('Clear all dry needles and leaves from roof valleys, eaves, and gutters')
+  }
+  if (flags.includes('Z0-VENT') || String(intakeAnswers?.vents || '').toLowerCase().includes('coarse') || String(intakeAnswers?.vents || '').toLowerCase().includes('open')) {
+    specificHazardActions.push('Install corrosion-resistant 1/8-inch ember-resistant metal vent screens over foundation and soffit vents')
+  }
+
+  // Topography / Slope Engineering Modifiers (PRC § 4291 formulas)
+  let slopeGuidance = 'Flat to gentle terrain: Maintain standard 2x shrub height spacing and clean permeable pathways.'
+  const topoStr = String(topoLabel).toLowerCase()
+  if (topoStr.includes('moderate') || topoStr.includes('20') || topoStr.includes('slope')) {
+    slopeGuidance = 'Moderate slope (20–40%): Wildfire travels uphill rapidly — feature low terraced dry-stack rock retaining planters and expand plant spacing to 3x shrub height with deep-rooted slope stabilizers (Lemonade berry, Toyon).'
+  } else if (topoStr.includes('steep') || topoStr.includes('40') || topoStr.includes('canyon')) {
+    slopeGuidance = 'Steep slope / Canyon wind corridor (>40%): Render low terraced stone retaining walls to break uphill flame spread. Eliminate grouped plant clusters — maintain isolated individual specimens with 6x height spacing.'
+  }
+
+  // Plant Palettes by standard & topography
+  const statePlants = 'Chalk dudleya (Dudleya pulverulenta), Shaw\'s agave, California fuchsia (Epilobium canum), Common yarrow, Toyon'
+  const ibhsPlants = 'California fuchsia (Epilobium canum), Common yarrow (Achillea millefolium), Lemonade berry (Rhus integrifolia), Toyon, Cleveland sage'
+
+  const actionList = specificHazardActions.length > 0
+    ? specificHazardActions.join('. ')
+    : (recommendations.actions || []).join('. ')
+  const materials = recommendations.materials ? recommendations.materials.join(', ') : '3/4-inch crushed gravel, decomposed granite, steel transition gate, ASTM E2886 vent mesh'
+
+  let standardGuidance
+  if (standard === 'state') {
+    standardGuidance = `
+- Standard Track: CAL FIRE State Regulatory Rule (PRC § 4291).
+- MANDATORY HAZARD DEMOLITION: Clear and remove all tall woody shrubs, dense hedges, climbing vines, and wood fences touching the siding, front steps, or bay windows.
+- Zone 0 (0–5 ft Foundation Zone): Replace removed brush with decomposed granite or fine gravel beds planted with low-growing, well-spaced, irrigated native succulents and perennials (${statePlants}) kept under 18 inches tall with visible space between plants and clean siding.
+- Zone 1 & 2 (Beyond 5 ft): Defensible landscape with healthy, well-spaced SoCal native plants (${ibhsPlants}), 6ft+ lower tree branch clearance, and clear horizontal spacing between shrub groupings.
+- Slope Architecture: ${slopeGuidance}
+- Fence Transition: 5-foot non-combustible metal transition gate where any fence meets the structure, preserving the remaining fence line.
+- Aesthetic Goal: "Succulent-Friendly State Defensible Space" — maintaining vibrant foundation succulents while meeting state wildfire brush-clearing codes.
+`.trim()
+  } else if (standard === 'ins') {
+    standardGuidance = `
+- Standard Track: IBHS Wildfire Prepared Home (Safer from Wildfires / 10 CCR § 2644.9).
+- MANDATORY HAZARD DEMOLITION: Clear and remove ALL vegetation, shrubs, mulch, and combustible materials within 5 feet of the entire house foundation, siding, bay windows, and steps.
+- Zone 0 (0–5 ft Foundation Strip): STRICT ZERO VEGETATION. The entire first 5 feet against all exterior walls, posts, bay windows, and stairs must be a 100% clean, non-combustible apron of 3/4-inch crushed gravel, decomposed granite, or stone pavers. No plants, no flowers, no succulents, and no combustible mulch anywhere in this 5-ft buffer.
+- Structure Hardening: Corrosion-resistant ember-resistant fine metal vent mesh (ASTM E2886) visible on foundation/soffit vents, plus a 5-foot metal transition gate attached to the house.
+- Zone 1 & 2 (Beyond 5 ft): Standard defensible plantings (${ibhsPlants}) positioned strictly outside the 5-foot non-combustible apron.
+- Slope Architecture: ${slopeGuidance}
+- Aesthetic Goal: "The Hardened Insurance Shield" — strict 0-ft hardscape perimeter engineered for maximum ember defense and insurance discount qualification.
+`.trim()
+  } else {
+    standardGuidance = `
+- Standard Track: Comprehensive Master Plan (Dual Compliance: IBHS Hardened Structure + Spaced California Native Garden).
+- MANDATORY HAZARD DEMOLITION: Clear and completely remove all existing overgrown shrubs, thick hedges, and combustible materials currently touching the siding, front steps, and foundation walls.
+- Zone 0 (0–5 ft Foundation Strip): Pristine 5-foot non-combustible apron of decomposed granite, crushed gravel, or stone pavers against the walls (ZERO VEGETATION within 5 feet of any wall or window), ember-resistant 1/16" stainless steel vent screens, and dark metal transition gate.
+- Zone 1 (5–30 ft) & Zone 2 (30–100 ft): Neat, beautifully designed Southern California native landscape starting strictly outside the 5-foot non-combustible buffer line. Feature colorful, drought-tolerant species (${ibhsPlants}) arranged in neat, separate, low-profile island clusters surrounded by decomposed granite paths (NO dense or overgrown hedges).
+- Slope Architecture: ${slopeGuidance}
+- Aesthetic Goal: "The Gold Standard Master Plan" — complete structure hardening at the foundation paired with a clean, well-spaced native landscape beyond 5 feet.
+`.trim()
+  }
+
+  const flaggedTitles = flags
+    .map((f) => hazardDefs?.[f]?.title || f)
+    .filter(Boolean)
+    .join('; ')
 
   return `
 Transform this residential property photo into a photorealistic, fire-resilient Southern California defensible landscape.
 
-Key Guidelines:
-- Preserve the exact home architecture, roofline, siding style, window locations, camera angle, and natural lighting.
-- Transform the targeted defensible area: ${zoneLabel}.
-- Topography setting: ${topography}.
-- Identified hazard conditions to fix: ${flaggedTitles}.
-- Apply these fire-resilient design upgrades: ${actionList}.
-- Materials to render: ${materials}.
-- Plant palette (Zone 1/2 only, beyond the 5ft non-combustible perimeter): ${plants}.
-- Ensure the first 5 feet against all walls, stairs, and posts is a clean non-combustible apron of crushed rock, decomposed granite, or flagstone pavers.
-- Replace any combustible wood/vinyl fence meeting the structure with non-combustible metal, steel posts, or masonry.
+CRITICAL HAZARD CLEARANCE & STRUCTURAL PRESERVATION:
+- CLEAR AND ELIMINATE all overgrown vegetation, dense shrubs, and wood fences currently touching or encroaching within 5 feet of the building siding, windows, and stairs.
+- Specific Identified Fixes: ${actionList}.
+${flaggedTitles ? `- Active Flagged Conditions: ${flaggedTitles}.` : ''}
+- Preserve the exact house architecture, roofline, siding color, window placements, stairs, camera perspective, lighting, and general property boundaries.
+- Targeted defensible space zone(s): ${zoneLabel}.
+- Topography setting: ${topoLabel}.
+- Approved materials: ${materials}.
+
+STANDARD-SPECIFIC LANDSCAPE SPECIFICATIONS:
+${standardGuidance}
+
+IMAGE GUIDELINES:
 - DO NOT add flames, smoke, fire trucks, warning signs, text overlays, watermark labels, people, or disaster destruction.
-- Render a realistic, desirable, drought-tolerant, fire-hardened home exterior.
+- Render a photorealistic, clean, desirable, drought-tolerant, fire-hardened Southern California property.
 `.trim()
 }
 
@@ -187,3 +282,72 @@ export async function generateFireSafeVisionImage({ photoFile, prompt }) {
   // 2. Default: Call Gemini via Firebase Vertex AI SDK
   return generateWithFirebaseVertexAI({ photoFile, prompt })
 }
+
+/**
+ * Multi-standard generator: Runs parallel transformations for State (PRC § 4291),
+ * Insurance (IBHS / Safer from Wildfires), and Comprehensive Both Standards so
+ * the user can instantly toggle between genuine standard variations on the report screen.
+ */
+export async function generateFireSafeVisionMultiStandardImages({ photoFile, basePromptConfig }) {
+  if (!photoFile) {
+    throw new Error('Upload a property photo before running Gemini image generation.')
+  }
+
+  const bothPrompt = buildAssessmentImagePrompt({
+    ...basePromptConfig,
+    standard: 'both',
+  })
+
+  const statePrompt = buildAssessmentImagePrompt({
+    ...basePromptConfig,
+    standard: 'state',
+  })
+
+  const ibhsPrompt = buildAssessmentImagePrompt({
+    ...basePromptConfig,
+    standard: 'ins',
+  })
+
+  const [bothSettled, stateSettled, ibhsSettled] = await Promise.allSettled([
+    generateFireSafeVisionImage({ photoFile, prompt: bothPrompt }),
+    generateFireSafeVisionImage({ photoFile, prompt: statePrompt }),
+    generateFireSafeVisionImage({ photoFile, prompt: ibhsPrompt }),
+  ])
+
+  const bothResult = bothSettled.status === 'fulfilled' ? bothSettled.value : null
+  const stateResult = stateSettled.status === 'fulfilled' ? stateSettled.value : null
+  const ibhsResult = ibhsSettled.status === 'fulfilled' ? ibhsSettled.value : null
+
+  if (!bothResult && !stateResult && !ibhsResult) {
+    const errorMsg =
+      (bothSettled.status === 'rejected' && bothSettled.reason?.message) ||
+      (stateSettled.status === 'rejected' && stateSettled.reason?.message) ||
+      (ibhsSettled.status === 'rejected' && ibhsSettled.reason?.message) ||
+      'Gemini AI image generation request failed for defensible space standards.'
+    throw new Error(errorMsg)
+  }
+
+  const primaryImage = bothResult?.imageUrl || ibhsResult?.imageUrl || stateResult?.imageUrl || ''
+  const bothImage = bothResult?.imageUrl || primaryImage
+  const stateImage = stateResult?.imageUrl || primaryImage
+  const insImage = ibhsResult?.imageUrl || primaryImage
+
+  const combinedText = [
+    bothResult?.text ? `[Combined Standards] ${bothResult.text}` : '',
+    ibhsResult?.text ? `[IBHS Standard] ${ibhsResult.text}` : '',
+    stateResult?.text ? `[State Rule] ${stateResult.text}` : '',
+  ]
+    .filter(Boolean)
+    .join(' \n\n')
+
+  return {
+    images: {
+      both: bothImage,
+      state: stateImage,
+      ins: insImage,
+    },
+    text: combinedText || bothResult?.text || ibhsResult?.text || stateResult?.text || '',
+  }
+}
+
+

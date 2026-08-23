@@ -286,77 +286,123 @@ export const PIN_COORDINATES = {
   'Z2-LIMB': [72, 35],
 }
 
+function hasOption(val, keyword) {
+  if (!val) return false
+  if (Array.isArray(val)) {
+    return val.some((v) => v.toLowerCase().includes(keyword.toLowerCase()))
+  }
+  return String(val).toLowerCase().includes(keyword.toLowerCase())
+}
+
 export function deriveHazardFlags(intake) {
   const flags = []
-  const zone = intake.zone || 'zone0'
 
-  // Zone 0 evaluation
-  if (zone.includes('0') || zone.includes('All') || zone === 'zone0' || zone === 'all') {
-    if (intake.surface === 'Mulch or bark') {
-      flags.push('Z0-MULCH', 'Z0-SURFACE')
-    } else if (intake.surface === 'Lawn or grass') {
-      flags.push('Z0-LAWN', 'Z0-SURFACE')
-    } else if (intake.surface === 'Bare soil' || intake.surface === 'Mixed' || intake.surface === 'none') {
-      flags.push('Z0-SURFACE')
-    }
-
-    if (intake.veg === 'Yes' || intake.veg === 'A few' || intake.veg === 'dense') {
-      flags.push('Z0-VEG')
-    }
-
-    if (intake.fence === 'Wood' || intake.fence === 'Vinyl' || intake.fence === 'wood' || intake.fence === 'vinyl') {
-      flags.push('Z0-FENCE')
-    }
-
-    if (intake.vents && intake.vents !== 'Fine metal mesh (1/16″–1/8″)' && intake.vents !== 'rated') {
-      flags.push('Z0-VENT')
-    }
-
-    if (intake.stored === 'Yes' || (intake.riskFactors && intake.riskFactors.includes('woodpile'))) {
-      flags.push('Z0-ITEMS')
-    }
-
-    if (intake.gutters && intake.gutters !== 'Clear of debris' && intake.gutters !== 'Clear') {
-      flags.push('Z0-GUTTER')
-    }
+  // Zone 0 Evaluation (0–5 ft)
+  if (hasOption(intake.surface, 'mulch') || hasOption(intake.surface, 'bark')) {
+    flags.push('Z0-MULCH', 'Z0-SURFACE')
+  }
+  if (hasOption(intake.surface, 'lawn') || hasOption(intake.surface, 'turf')) {
+    flags.push('Z0-LAWN', 'Z0-SURFACE')
+  }
+  if (hasOption(intake.surface, 'soil') || hasOption(intake.surface, 'dirt')) {
+    flags.push('Z0-SURFACE')
+  }
+  if (
+    !hasOption(intake.surface, 'gravel') &&
+    !hasOption(intake.surface, 'concrete') &&
+    !hasOption(intake.surface, 'paver') &&
+    !hasOption(intake.surface, 'granite')
+  ) {
+    flags.push('Z0-SURFACE')
   }
 
-  // Zone 1 evaluation
-  if (zone.includes('1') || zone.includes('All') || zone.includes('0') || zone === 'zone1' || zone === 'all' || zone === 'zone0') {
-    if (
-      intake.topography &&
-      ['Mild slope (<20%)', 'Moderate slope (20–40%)', 'Steep slope (>40%)', 'Canyon / Saddle', 'Ridgetop', 'Mild slope', 'Moderate slope', 'Steep slope', 'Canyon'].includes(
-        intake.topography,
-      )
-    ) {
-      flags.push('Z1-SLOPE')
-    }
-
-    if (intake.gutters === 'Full of debris' || intake.veg === 'Yes' || (intake.riskFactors && intake.riskFactors.includes('debris'))) {
-      flags.push('Z1-DEAD')
-    }
-
-    if (zone.includes('1') || zone.includes('All') || zone === 'zone1' || zone === 'all') {
-      if (intake.veg === 'Dense shrubs' || intake.veg === 'dense' || intake.veg === 'Yes') {
-        flags.push('Z1-DENSE', 'Z1-SPACING')
-      }
-      if (intake.riskFactors && intake.riskFactors.includes('overhang')) {
-        flags.push('Z1-LADDER', 'Z1-LIMB')
-      }
-    }
+  if (
+    hasOption(intake.veg, 'shrub') ||
+    hasOption(intake.veg, 'dense') ||
+    hasOption(intake.veg, 'ivy') ||
+    hasOption(intake.veg, 'vine') ||
+    hasOption(intake.veg, 'succulent') ||
+    hasOption(intake.veg, 'perennial') ||
+    hasOption(intake.veg, 'yes')
+  ) {
+    flags.push('Z0-VEG')
   }
 
-  // Zone 2 evaluation
-  if (zone.includes('2') || zone.includes('All') || zone === 'zone2' || zone === 'all') {
-    if (intake.topography?.includes('Steep') || intake.topography?.includes('Canyon')) {
-      flags.push('Z2-STEEP')
-    }
-    if (intake.veg === 'Dense shrubs' || intake.veg === 'dense') {
-      flags.push('Z2-CANOPY')
-    }
-    if (intake.riskFactors && intake.riskFactors.includes('debris')) {
-      flags.push('Z2-DEAD', 'Z2-LIMB')
-    }
+  if (
+    hasOption(intake.fence, 'wood') ||
+    hasOption(intake.fence, 'vinyl') ||
+    hasOption(intake.fence, 'deck') ||
+    hasOption(intake.fence, 'porch')
+  ) {
+    flags.push('Z0-FENCE')
+  }
+
+  if (
+    hasOption(intake.vents, 'coarse') ||
+    hasOption(intake.vents, 'open') ||
+    hasOption(intake.vents, 'not sure') ||
+    hasOption(intake.vents, 'crawlspace') ||
+    hasOption(intake.vents, 'soffit')
+  ) {
+    flags.push('Z0-VENT')
+  }
+
+  if (
+    hasOption(intake.stored, 'firewood') ||
+    hasOption(intake.stored, 'trash') ||
+    hasOption(intake.stored, 'propane') ||
+    hasOption(intake.stored, 'furniture') ||
+    hasOption(intake.stored, 'mat') ||
+    hasOption(intake.stored, 'yes')
+  ) {
+    flags.push('Z0-ITEMS')
+  }
+
+  if (
+    hasOption(intake.gutters, 'needle') ||
+    hasOption(intake.gutters, 'leaf') ||
+    hasOption(intake.gutters, 'debris') ||
+    hasOption(intake.gutters, 'valley') ||
+    hasOption(intake.gutters, 'dead')
+  ) {
+    flags.push('Z0-GUTTER', 'Z1-DEAD')
+  }
+
+  // Zone 1 Evaluation (5–30 ft)
+  if (
+    hasOption(intake.topography, 'slope') ||
+    hasOption(intake.topography, 'canyon') ||
+    hasOption(intake.topography, 'ridgetop')
+  ) {
+    flags.push('Z1-SLOPE')
+  }
+
+  if (
+    hasOption(intake.veg, 'branch') ||
+    hasOption(intake.veg, 'overhang') ||
+    hasOption(intake.veg, 'limb')
+  ) {
+    flags.push('Z1-LADDER', 'Z1-LIMB')
+  }
+
+  if (
+    hasOption(intake.veg, 'dense') ||
+    hasOption(intake.veg, 'shrub') ||
+    hasOption(intake.veg, 'ivy')
+  ) {
+    flags.push('Z1-DENSE', 'Z1-SPACING')
+  }
+
+  // Zone 2 Evaluation (30–100 ft)
+  if (
+    hasOption(intake.topography, 'steep') ||
+    hasOption(intake.topography, 'canyon')
+  ) {
+    flags.push('Z2-STEEP')
+  }
+
+  if (hasOption(intake.zone, 'zone 2') || hasOption(intake.zone, 'all')) {
+    flags.push('Z2-CANOPY', 'Z2-LIMB')
   }
 
   return [...new Set(flags)]
