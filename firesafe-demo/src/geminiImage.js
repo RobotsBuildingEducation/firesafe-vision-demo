@@ -15,14 +15,9 @@ export const GEMINI_IMAGE_MODEL = 'gemini-3.1-flash-image'
  * Never logs secret values — only the mode, so 401s become diagnosable.
  */
 function describeAppCheckFlow() {
-  const raw = (import.meta.env.VITE_APPCHECK_DEBUG_TOKEN || '').trim()
   const debugGlobal = typeof window !== 'undefined' && window.FIREBASE_APPCHECK_DEBUG_TOKEN
   const enterprise = !!(import.meta.env.VITE_RECAPTCHA_ENTERPRISE_KEY || '').trim()
-  const mode = raw || debugGlobal
-    ? `debug-token (env ${raw ? 'set' : 'unset'}, global ${debugGlobal ? 'set' : 'unset'})`
-    : enterprise
-      ? 'reCAPTCHA Enterprise'
-      : 'reCAPTCHA v3'
+  const mode = debugGlobal ? 'debug-token' : enterprise ? 'reCAPTCHA Enterprise' : 'reCAPTCHA v3'
   return `flow=${mode} host=${window.location.host}`
 }
 

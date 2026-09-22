@@ -21,38 +21,29 @@ export const firebaseApp = getApps().length
 
 export let appCheck = undefined;
 
-// Initialize Firebase App Check with the reCAPTCHA site key.
-//
-// IMPORTANT: Do NOT force a debug token on localhost automatically.
-// Setting `FIREBASE_APPCHECK_DEBUG_TOKEN = true` makes the SDK mint an
-// unregistered debug token, and with enforcement ON for Firebase AI Logic
-// (firebasevertexai.googleapis.com) every generateContent call then fails
-// with: 401 "Firebase App Check token is invalid."
-//
-// Correct setup:
-// - Local dev: either (a) use the real reCAPTCHA v3 key (add `localhost` to
-//   allowed domains in the reCAPTCHA admin console), or (b) opt into a debug
-//   token explicitly via `VITE_APPCHECK_DEBUG_TOKEN=<token-from-console>` and
-//   register that token in Firebase Console > App Check > Manage debug tokens.
-// - Production: never set a debug token; use real reCAPTCHA.
-if (typeof window !== "undefined") {
-  const rawDebugToken = (import.meta.env.VITE_APPCHECK_DEBUG_TOKEN || "").trim();
+// Local `vite` only. Production builds must use reCAPTCHA, never a debug token.
+// `import.meta.env.DEV` is false in `vite build`, so this block is stripped
+// and the debug token is not shipped.
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  const host = window.location.hostname;
+  const isLocal = host === "localhost" || host === "127.0.0.1";
+  const rawDebugToken = isLocal
+    ? (import.meta.env.VITE_APPCHECK_DEBUG_TOKEN || "").trim()
+    : "";
 
   if (rawDebugToken) {
-    // "true" (or "1"/"auto") = let SDK auto-generate + log a debug token.
-    // Any other string = use it as the debug token value.
     const lower = rawDebugToken.toLowerCase();
     const auto = lower === "true" || lower === "1" || lower === "auto";
     const debugValue = auto ? true : rawDebugToken;
     window.FIREBASE_APPCHECK_DEBUG_TOKEN = debugValue;
     self.FIREBASE_APPCHECK_DEBUG_TOKEN = debugValue;
     console.info(
-      auto
-        ? "[App Check] Debug mode AUTO: copy the 'App Check debug token' from this console into Firebase Console > App Check > Manage debug tokens, then set VITE_APPCHECK_DEBUG_TOKEN to that value and restart."
-        : "[App Check] Using explicit debug token from VITE_APPCHECK_DEBUG_TOKEN. " +
-            "Make sure it is registered in Firebase Console > App Check > Manage debug tokens.",
+      "[App Check] Local debug token on. Production uses reCAPTCHA.",
     );
   }
+}
+
+if (typeof window !== "undefined") {
 
   const recaptchaSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
@@ -84,7 +75,7 @@ if (typeof window !== "undefined") {
   }
 
   console.info(
-    `[App Check] init done. debug=${rawDebugToken ? "on" : "off"}, ` +
+    `[App Check] init done. debug=${window.FIREBASE_APPCHECK_DEBUG_TOKEN ? "on" : "off"}, ` +
       `provider=${enterpriseKey ? "enterprise" : recaptchaSiteKey ? "v3" : "NONE — 401s expected"}.`,
   );
 }
