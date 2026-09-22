@@ -1,7 +1,58 @@
 import { getAI, getGenerativeModel, ResponseModality, VertexAIBackend } from 'firebase/ai'
-import { firebaseApp } from './firebase'
+import { getToken } from 'firebase/app-check'
+import { appCheck, firebaseApp } from './firebase'
 
 export const GEMINI_IMAGE_MODEL = 'gemini-3.1-flash-image'
+
+/**
+ * Force-mint an App Check token BEFORE calling Vertex AI so the *real*
+ * root cause (bad site key, domain not allowlisted, unregistered debug
+ * token, blocked reCAPTCHA script) surfaces here instead of as a generic
+ * 401 "App Check token is invalid" from generateContent.
+ */
+/**
+ * Reports which attestation flow is actually live in this browser tab.
+ * Never logs secret values — only the mode, so 401s become diagnosable.
+ */
+function describeAppCheckFlow() {
+  const raw = (import.meta.env.VITE_APPCHECK_DEBUG_TOKEN || '').trim()
+  const debugGlobal = typeof window !== 'undefined' && window.FIREBASE_APPCHECK_DEBUG_TOKEN
+  const enterprise = !!(import.meta.env.VITE_RECAPTCHA_ENTERPRISE_KEY || '').trim()
+  const mode = raw || debugGlobal
+    ? `debug-token (env ${raw ? 'set' : 'unset'}, global ${debugGlobal ? 'set' : 'unset'})`
+    : enterprise
+      ? 'reCAPTCHA Enterprise'
+      : 'reCAPTCHA v3'
+  return `flow=${mode} host=${window.location.host}`
+}
+
+async function ensureAppCheckToken() {
+  if (!appCheck) {
+    throw new Error(
+      'App Check is not initialized (missing VITE_RECAPTCHA_SITE_KEY at build time). ' +
+        'Add the key to .env and rebuild, otherwise enforced Firebase AI Logic calls 401.',
+    )
+  }
+  try {
+    // forceRefresh=true: bypass the cached token. Required here because the
+    // old code forced a debug token on localhost, and that invalid token can
+    // sit in IndexedDB cache and keep 401ing even after domains are fixed.
+    const result = await getToken(appCheck, true)
+    if (!result?.token) {
+      throw new Error('App Check minted an empty token.')
+    }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    throw new Error(
+      `App Check could not mint a token on ${window.location.hostname}. ` +
+        `Root cause: ${detail}. Fix: (1) localhost must be in your reCAPTCHA key's allowed domains, ` +
+        `or set VITE_APPCHECK_DEBUG_TOKEN to a console-registered debug token; ` +
+        `(2) production/preview domains must be allowlisted on the same reCAPTCHA key; ` +
+        `(3) Firebase Console provider type (v3 vs Enterprise) must match the code.`,
+      { cause: err },
+    )
+  }
+}
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -25,7 +76,13 @@ async function fileToImagePart(file) {
 }
 
 function getImageModel() {
-  const ai = getAI(firebaseApp, { backend: new VertexAIBackend('global') })
+  // Replay protection is enforced on Firebase AI Logic. Session tokens are
+  // rejected with 401 "App Check token is invalid" — each call needs a
+  // fresh limited-use token.
+  const ai = getAI(firebaseApp, {
+    backend: new VertexAIBackend('global'),
+    useLimitedUseAppCheckTokens: true,
+  })
 
   return getGenerativeModel(ai, {
     model: GEMINI_IMAGE_MODEL,
@@ -96,6 +153,9 @@ async function generateWithDirectApiKey({ apiKey, photoFile, prompt }) {
 
 async function generateWithFirebaseVertexAI({ photoFile, prompt }) {
   try {
+    // Surface attestation problems with an actionable message first.
+    await ensureAppCheckToken()
+
     const model = getImageModel()
     const imagePart = await fileToImagePart(photoFile)
     const result = await model.generateContent([{ text: prompt }, imagePart])
@@ -135,6 +195,25 @@ async function generateWithFirebaseVertexAI({ photoFile, prompt }) {
       throw new Error('Firebase AI Logic is missing provider configuration in Firebase Console.', {
         cause: error,
       })
+    }
+
+    if (
+      message.includes('App Check token is invalid') ||
+      message.includes('401') ||
+      message.includes('UNAUTHENTICATED') ||
+      message.includes('fetch-error')
+    ) {
+      throw new Error(
+        `App Check rejected by Firebase AI Logic [${describeAppCheckFlow()}]. ` +
+          `If flow=debug-token: the minted debug token is NOT on the registered list for THIS web app ` +
+          `(Firebase Console > App Check > select web app ...812c7435 > Manage debug tokens). ` +
+          `Re-copy the exact 'App Check debug token' logged in THIS browser tab on THIS origin ` +
+          `(localhost vs 127.0.0.1 are different origins with different tokens), register it, put the UUID ` +
+          `in .env as VITE_APPCHECK_DEBUG_TOKEN=<uuid>, and restart vite. ` +
+          `If flow=reCAPTCHA: Console provider type (v3 vs Enterprise) and secret must match this site key. ` +
+          `Original: ${message.slice(0, 200)}`,
+        { cause: error },
+      )
     }
 
     throw error
